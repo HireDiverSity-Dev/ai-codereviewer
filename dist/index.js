@@ -106,24 +106,26 @@ function analyzeCode(parsedDiff, prDetails) {
     });
 }
 function createPrompt(file, chunk, prDetails) {
-    return `Your task is to review pull requests. Instructions:
-- Provide the response in following JSON format:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}
-- Do not give positive comments or compliments.
-- Provide comments and suggestions ONLY if there is something to improve, otherwise "reviews" should be an empty array.
-- Write the comment in GitHub Markdown format.
-- Use the given description only for the overall context and only comment the code.
-- IMPORTANT: NEVER suggest adding comments to the code.
+    return `당신의 작업은 Pull Request를 검토하는 것입니다. 
+  지침:
+- 응답을 다음 JSON 형식으로 제공하세요:  {"reviews": [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}
+- 검토 의견은 반드시 한국어로 작성하세요.
+- 긍정적인 의견이나 칭찬을 하지 마세요.
+- 개선할 사항이 있을 경우에만 코멘트와 제안을 제공하세요, 개선할 점이 없다면, "reviews"는 빈 배열이어야 합니다.
+- 코멘트는 GitHub Markdown 형식으로 작성하세요.
+- 제공된 설명(PR 제목 및 설명)은 전반적인 맥락을 이해하는 용도로만 사용하고, 코드에 대한 코멘트만 작성하세요.
+- 중요: 절대 코드에 주석을 추가하도록 제안하지 마세요.
 
-Review the following code diff in the file "${file.to}" and take the pull request title and description into account when writing the response.
+다음 코드 변경 사항이 포함된 파일 "${file.to}" 을 검토하고, Pull Request의 제목 및 설명을 고려하여 응답을 작성하세요.
   
-Pull request title: ${prDetails.title}
-Pull request description:
+Pull Request 제목: ${prDetails.title}
+Pull Request 설명:
 
 ---
 ${prDetails.description}
 ---
 
-Git diff to review:
+검토할 Git diff:
 
 \`\`\`diff
 ${chunk.content}
@@ -139,14 +141,10 @@ function getAIResponse(prompt) {
     return __awaiter(this, void 0, void 0, function* () {
         const queryConfig = {
             model: OPENAI_API_MODEL,
-            temperature: 0.2,
-            max_tokens: 700,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
+            max_completion_tokens: 2048,
         };
         try {
-            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), (OPENAI_API_MODEL === "gpt-4-1106-preview"
+            const response = yield openai.chat.completions.create(Object.assign(Object.assign(Object.assign({}, queryConfig), (OPENAI_API_MODEL === "o3-mini"
                 ? { response_format: { type: "json_object" } }
                 : {})), { messages: [
                     {
@@ -155,7 +153,9 @@ function getAIResponse(prompt) {
                     },
                 ] }));
             const res = ((_b = (_a = response.choices[0].message) === null || _a === void 0 ? void 0 : _a.content) === null || _b === void 0 ? void 0 : _b.trim()) || "{}";
-            return JSON.parse(res).reviews;
+            const reviews = JSON.parse(res).reviews;
+            console.log(reviews);
+            return reviews;
         }
         catch (error) {
             console.error("Error:", error);
@@ -192,7 +192,8 @@ function main() {
         const prDetails = yield getPRDetails();
         let diff;
         const eventData = JSON.parse((0, fs_1.readFileSync)((_a = process.env.GITHUB_EVENT_PATH) !== null && _a !== void 0 ? _a : "", "utf8"));
-        if (eventData.action === "opened") {
+        if (eventData.action === "opened" ||
+            eventData.action === "ready_for_review") {
             diff = yield getDiff(prDetails.owner, prDetails.repo, prDetails.pull_number);
         }
         else if (eventData.action === "synchronize") {
